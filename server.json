@@ -10,12 +10,21 @@
     "notice": "Copyright 2021 Robert Lee.  Licensed under the terms of the MIT License.  All trademarks used herein are the property of their respective owners.",
     "credits": [
         {
-            "title": "udi-wemo-poly: A Polyglot v2 interface to Wemo devices",
+            "title": "udi-wemo-poly: A Polyglot v3 interface to Wemo devices",
             "author": "Robert Lee (rl1131)",
-            "version": "0.2.3",
-            "date": "July 31, 2021",
+            "version": "1.0.0",
+            "date": "September 1, 2021",
             "source": "https://github.com/rl1131/udi-wemo-poly",
             "license": "https://github.com/rl1131/udi-wemo-poly/blob/master/LICENSE"
         }
-    ]
+    ],
+	"store": {
+		"developer": "bpaauwe@bobsplace.com",
+		"purchaseOptions": [
+			{
+				"isPerpetual": true,
+				"price": 0
+			}
+		]
+	}
 }

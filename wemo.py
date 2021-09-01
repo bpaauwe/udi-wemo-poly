@@ -5,84 +5,26 @@
 import sys
 import socket
 import logging
-import polyinterface
+import udi_interface
 from time import sleep
 from datetime import datetime
 
-LOGGER = polyinterface.LOGGER
+LOGGER = udi_interface.LOGGER
 LOGGER.info('Wemo Node Server running on Python version {}'.format(sys.version_info))
+poly = None
+node_q = []
 
 import pywemo
-
-class Control(polyinterface.Controller):
-    """ Polyglot Controller for Wemo Node Server """
-    def __init__(self, polyglot):
-        super().__init__(polyglot)
-        self.name = 'Wemo Node Server'
-        self.address = 'wemons'
-        self.primary = self.address
-        self.subscription_registry = pywemo.SubscriptionRegistry()
-        self.subscription_registry_started = False
-        LOGGER.info('Wemo Controller Initialized')
-
-    def start(self):
-        LOGGER.info('Starting ' + self.name)
-        self.discover()
-
-    def stop(self):
-        LOGGER.info('Wemo NodeServer is stopping')
-        self.subscription_registry.stop()
-        if self.subscription_registry_started:
-            self.subscription_registry_started = False
-
-    def shortPoll(self):
-        for node in self.nodes.values():
-            node.updateInfo()
-
-    def updateInfo(self):
-        pass
-
-    def query(self, command=None):
-        for node in self.nodes:
-            self.nodes[node].reportDrivers()
-
-    def discover(self, command=None):
-        devices = pywemo.discover_devices()
-        if self.subscription_registry_started is False:
-            self.subscription_registry.start()
-            self.subscription_registry_started = True
-        for wemodev in devices:
-            dtype = wemodev.__class__.__name__
-            LOGGER.info('Wemo Device {} of type {} found.'.format(wemodev.name, dtype));
-            # if dtype in ['LightSwitch', 'Switch', 'OutdoorPlug']:
-            if issubclass(wemodev.__class__, pywemo.Switch):
-                LOGGER.info('Adding {} {} to ISY.'.format(dtype, wemodev.name))
-                address = wemodev.mac.lower()
-                self.addNode(WemoSwitch(self, self.address, address, wemodev.name, wemodev, self.subscription_registry))
-            # elif dtype == 'Dimmer':
-            elif issubclass(wemodev.__class__, pywemo.Dimmer):
-                LOGGER.info('Adding {} {} to ISY.'.format(dtype, wemodev.name))
-                address = wemodev.mac.lower()
-                self.addNode(WemoDimmer(self, self.address, address, wemodev.name, wemodev, self.subscription_registry))
-            #elif dtype == 'Insight':
-            elif issubclass(wemodev.__class__, pywemo.Insight):
-                LOGGER.info('Adding {} {} to ISY.'.format(dtype, wemodev.name))
-                address = wemodev.mac.lower()
-                self.addNode(WemoInsight(self, self.address, address, wemodev.name, wemodev, self.subscription_registry))
-            else:
-                LOGGER.warning('Device type {} is not currently supported.'.format(dtype));
-
-    id = 'WEMO_CTRL'
-    commands = {'DISCOVER': discover}
-    drivers = [{'driver': 'ST', 'value': 1, 'uom': 2}]
+subscription_registry = pywemo.SubscriptionRegistry()
+subscription_registry_started = False
 
 
-
-class WemoSwitch(polyinterface.Node):
+class WemoSwitch(udi_interface.Node):
     """ Polyglot for Wemo Switch """
     def __init__(self, controller, primary, address, name, wemodev, subregistry=None):
         super().__init__(controller, primary, address, name)
         self.device = wemodev
+        controller.subscribe(controller.POLL, self.updateInfo)
         if subregistry is not None:
             self.sreg = subregistry
             subregistry.register(self.device)
@@ -113,7 +55,9 @@ class WemoSwitch(polyinterface.Node):
             rval = None
         return rval
 
-    def updateInfo(self):
+    def updateInfo(self, pollType):
+        if pollType != 'shortPoll':
+            return
         """ Get current switch status.  If it is doesn't match our
             status value then assume someone changed it remotely """
         wemost = self._getstate()
@@ -176,13 +120,14 @@ class WemoSwitch(polyinterface.Node):
     id = 'WEMO_SWITCH'
 
 
-class WemoDimmer(polyinterface.Node):
+class WemoDimmer(udi_interface.Node):
     BRIGHT_MAX = 100
     LEVEL_INCREMENT = 5
 
     """ Polyglot for Wemo Dimmer """
     def __init__(self, controller, primary, address, name, wemodev, subregistry=None):
         super().__init__(controller, primary, address, name)
+        controller.subscribe(controller.POLL, self.updateInfo)
         self.device = wemodev
         if subregistry is not None:
             self.sreg = subregistry
@@ -217,7 +162,10 @@ class WemoDimmer(polyinterface.Node):
                     self.setDriver('ST', 0)
         self.setDriver('GV0', self.on_level)
 
-    def updateInfo(self):
+    def updateInfo(self, pollType):
+        if pollType != 'shortPoll':
+            return
+
         """ Get current device status.  If it is doesn't match our
             status value then assume someone changed it remotely """
         wemost = self._getstate()
@@ -365,7 +313,7 @@ def InsightUpdate(device, update_string):
     device.insight_params['currentpower'] = int(float(currentmw))
 
 
-class WemoInsight(polyinterface.Node):
+class WemoInsight(udi_interface.Node):
     """ Polyglot for Wemo Insight """
     STATE_ON  = 1
     STATE_OFF = 0
@@ -381,6 +329,7 @@ class WemoInsight(polyinterface.Node):
 
     def __init__(self, controller, primary, address, name, wemodev, subregistry=None):
         super().__init__(controller, primary, address, name)
+        controller.subscribe(controller.POLL, self.updateInfo)
         self.device = wemodev
         self.sreg = subregistry
         self.on_state = 0
@@ -425,11 +374,12 @@ class WemoInsight(polyinterface.Node):
         self.setDriver('GV7', 1 if self.on_state == 1 else 0)
         self.reportDrivers()
 
-    def updateInfo(self):
+    def updateInfo(self, pollType):
         """ Get current device status.  If it is doesn't match our
             status value then assume someone changed it remotely """
-        self._getstate()
-        self._updateState()
+        if pollType == 'shortPoll':
+            self._getstate()
+            self._updateState()
 
     def onoff(self, command=None):
         """ ISY Request the device be turned on """
@@ -482,15 +432,83 @@ class WemoInsight(polyinterface.Node):
     
     
     
+def node_queue(data):
+    global node_q
+
+    node_q.append(data['address'])
+
+def wait_for_node_event():
+    global node_q
+
+    while len(node_q) == 0:
+        time.sleep(0.2)
+    return node_q.pop()
+
+def discover(poly):
+    global subscription_registry_started
+    global subscription_registry
+
+    devices = pywemo.discover_devices()
+    if subscription_registry_started is False:
+        subscription_registry.start()
+        subscription_registry_started = True
+    for wemodev in devices:
+        dtype = wemodev.__class__.__name__
+        LOGGER.info('Wemo Device {} of type {} found.'.format(wemodev.name, dtype));
+        # if dtype in ['LightSwitch', 'Switch', 'OutdoorPlug']:
+        if issubclass(wemodev.__class__, pywemo.Switch):
+            LOGGER.info('Adding {} {} to ISY.'.format(dtype, wemodev.name))
+            address = wemodev.mac.lower()
+            if poly.getNode(address) == None:
+                poly.addNode(WemoSwitch(poly, address, address, wemodev.name, wemodev, subscription_registry))
+        # elif dtype == 'Dimmer':
+        elif issubclass(wemodev.__class__, pywemo.Dimmer):
+            LOGGER.info('Adding {} {} to ISY.'.format(dtype, wemodev.name))
+            address = wemodev.mac.lower()
+            if poly.getNode(address) == None:
+                poly.addNode(WemoDimmer(poly, address, address, wemodev.name, wemodev, subscription_registry))
+        #elif dtype == 'Insight':
+        elif issubclass(wemodev.__class__, pywemo.Insight):
+            LOGGER.info('Adding {} {} to ISY.'.format(dtype, wemodev.name))
+            address = wemodev.mac.lower()
+            if poly.getNode(address) == None:
+                poly.addNode(WemoInsight(poly, address, address, wemodev.name, wemodev, subscription_registry))
+        else:
+            LOGGER.info('Wemo {} found and skipped.'.format(wemodev.name))
+            LOGGER.warning('Device type {} is not currently supported.'.format(dtype));
+
+def rediscover(pollType):
+    global poly
+
+    if pollType == 'longPoll':
+        discover(poly)
+
+def stop():
+    global poly
+    global subscription_registry
+
+    subscription_registry.stop()
+    for node in poly.nodes():
+        node.stop()
+
 if __name__ == "__main__":
     try:
         LOGGER.info("Wemo - Getting Poly")
-        poly = polyinterface.Interface("Wemo")
+        poly = udi_interface.Interface([])
         LOGGER.info("Starting Poly")
         poly.start()
         LOGGER.info("Getting Control")
-        wemo = Control(poly)
+        poly.subscribe(poly.ADDNODEDONE, node_queue)
+        poly.subscribe(poly.STOP, stop)
+        poly.subscribe(poly.POLL, rediscover)
+        poly.ready()
+        poly.updateProfile()
+
+        LOGGER.info("Device discovery")
+        discover(poly)
+
+        #Control(poly, 'controller', 'controller', 'Wemo')
         LOGGER.info("Starting Control")
-        wemo.runForever()
+        poly.runForever()
     except (KeyboardInterrupt, SystemExit):
         sys.exit(0)
