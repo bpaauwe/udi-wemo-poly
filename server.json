@@ -1,6 +1,6 @@
 {
     "name": "Wemo",
-    "docs": "https://github.com/rl1131/udi-wemo-poly",
+    "docs": "https://github.com/bpaauwe/udi-wemo-poly",
     "type": "python3",
     "executable": "wemo.py",
     "install": "install.sh",
@@ -14,8 +14,8 @@
             "author": "Robert Lee (rl1131)",
             "version": "0.2.4",
             "date": "Oct 3, 2021",
-            "source": "https://github.com/rl1131/udi-wemo-poly",
-            "license": "https://github.com/rl1131/udi-wemo-poly/blob/master/LICENSE"
+            "source": "https://github.com/bpaauwe/udi-wemo-poly",
+            "license": "https://github.com/bpaauwe/udi-wemo-poly/blob/master/LICENSE"
         }
     ]
 }

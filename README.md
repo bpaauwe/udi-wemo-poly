@@ -1,6 +1,6 @@
 # Polyglot v2 Node Server for Wemo Switches
 
-[![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/rl1131/udi-wemo-poly/blob/master/LICENSE)
+[![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/bpaauwe/udi-wemo-poly/blob/master/LICENSE)
 
 This [Polyglot v2](https://github.com/UniversalDevicesInc/polyglot-v2) node server provides an interface between the ISY home automation controller from Universal Devices Inc. and Wemo WiFi switches.
 
